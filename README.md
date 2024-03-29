@@ -32,3 +32,7 @@ For a playlist stored in `SPORT PLUS\Playlists` the file paths are:
 ..\Music\01 - Michael McEachern - Easier As Us.mp3
 ..\Music\Tunguska_Electronic_Music_Society_-_Aquascape_-_Sunrise.mp3
 ```
+
+###  how to run
+* on mac: `python3.9 gen_playlist_jam.py -vvv  -m dev/itunes-mac/nano.m3u8 nano`
+* on windows: ``

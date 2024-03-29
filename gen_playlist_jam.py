@@ -148,7 +148,7 @@ class PlayListManager:
         if self.verbose:
             print("generating m3u playlist: %s" % target)
 
-        with open(target,"w",encoding='utf-8') as fd:
+        with open(target,"w",encoding='utf-8', newline='') as fd:
             fd.write("#EXTM3U\r\n")
             for item in playlist:
                 if self.verbose:
@@ -312,6 +312,5 @@ if __name__ == "__main__":
     if args.migrate_playlist:
         # migrate a current existing playlist to the jam, moving the music, and creating the playlist.
         playlist_data = pm.read_playlist(args.migrate_playlist)
-
         pm.migrate_playlist(playlist_data, args.playlist, args.migrate_playlist)
         sys.exit(0)
