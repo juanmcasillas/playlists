@@ -18,6 +18,7 @@ import argparse
 import mutagen
 from mutagen.easyid3 import EasyID3
 from mutagen.mp3 import MP3
+from mutagen.id3 import ID3,APIC
 import argparse
 import sys
 import glob
@@ -26,7 +27,8 @@ import pathlib
 import m3u8
 import shutil
 import platform
-
+from PIL import Image
+from io import BytesIO
 
 class PlayListManager:
     # platform.system()
@@ -37,6 +39,9 @@ class PlayListManager:
     }
     MUSIC_DIR = "Music"
     PLAYLIST_DIR = "Playlists"
+    MAX_IMG_SZ = (450, 450)
+    MAX_IMG_WIDTH, MAX_IMG_HEIGHT = MAX_IMG_SZ
+    MAX_DPI = (72,72)
 
     def __init__(self, verbose=False):
         self.verbose = verbose
@@ -84,14 +89,15 @@ class PlayListManager:
             directory = os.path.join(self.jam_root, base, directory)
         return directory
 
-    def jam_music_dir(self, directory):
+    def jam_music_dir(self, directory=""):
         return self.jam_dir(self.MUSIC_DIR, directory)
 
-    def jam_playlist_dir(self, directory):
+    def jam_playlist_dir(self, directory=""):
         return self.jam_dir(self.PLAYLIST_DIR, directory)
 
     def jam_music_entry_dir(self, entry):
         # return the entry using the base directory of jam's music
+        # use the windows format supported in the player
         p = "..\\%s" % pathlib.Path(entry).relative_to(self.jam_root)
         return p.replace("/","\\")
 
@@ -145,22 +151,25 @@ class PlayListManager:
         with open(target,"w",encoding='utf-8') as fd:
             fd.write("#EXTM3U\r\n")
             for item in playlist:
+                if self.verbose:
+                    print("* adding: %s" % item['file'])
                 fd.write("#EXTINF:%d, %s\r\n" % (item['duration'], item['title']))
                 fd.write("%s\r\n" % item['file'])
 
+        if self.verbose:
+            print("Added %d files" % len(playlist))
         return len(playlist)
 
 
     
 
 
-    def read_playlist(self, directory, playlist_file):
+    def read_playlist(self, playlist_file):
 
         if not os.path.exists(playlist_file):
             raise ValueError("playlist file %s doesn't exists" % playlist_file)
 
         playlist = []
-        dir_path = pathlib.Path(directory)
         try:
             data = m3u8.load(playlist_file)
         except Exception as e:
@@ -171,25 +180,28 @@ class PlayListManager:
                 playlist.append({
                     'title': i.title,
                     'file': i.uri,
-                    'path': str(dir_path / pathlib.Path(i.uri)),
+                    'path': str(pathlib.Path(i.uri)),
                     'duration': i.duration
                 })
-
         return playlist
 
-    def migrate_playlist(self, playlist_data, playlist, from_dir=None, to_dir=None):
-        if not from_dir or not to_dir or \
-            not os.path.exists(from_dir) or \
-            not os.path.isdir(from_dir):
-                raise ValueError("from_dir & to_dir must be valid directories")
+    def migrate_playlist(self, playlist_data, playlist_name, from_playlist, create_dir=False):
 
         new_playlist = []
+
+        # put all the files in the same dir, so we can
+        # use playlists to manage the content.
+        if create_dir:
+            to_dir = self.jam_music_dir(playlist_name)
+        else:
+            to_dir = self.jam_music_dir()
 
         if  not os.path.exists(to_dir):
             os.makedirs(to_dir, exist_ok=True)
 
-        from_dir_path = pathlib.Path(from_dir)
+        from_dir_path = pathlib.Path(from_playlist).parent
         to_dir_path   = pathlib.Path(to_dir  )
+
         # process the source data in playlist_data. If copy_files false
         # move then to the relative directory, and change the path else
         # move the files. Then write the playlist in the right place
@@ -216,22 +228,59 @@ class PlayListManager:
 
             try:
                 shutil.copyfile(src_file, tgt_file)
+                self.check_artwork(tgt_file)
             except shutil.SameFileError:
                 pass
 
-            item['file'] = str(tgt_file)
+            item['file'] = self.jam_music_entry_dir(tgt_file)
             new_playlist.append(item)
 
-        self.gen_m3u_playlist(new_playlist, to_dir, pathlib.Path(playlist).name)
+        self.gen_m3u_playlist(new_playlist, playlist_name)
 
+    def check_artwork(self, music_file):
+        # change image things.
+        mp3file = MP3(music_file, ID3=ID3)
+        tags = mp3file.tags
+        if args.verbose > 2:
+            print("----", music_file)
+            print(tags.pprint())
+
+        if 'APIC:' in tags.keys():
+            # check if we need to resize it
+            
+            picturetag = tags['APIC:']
+            picturetag.type = 3
+            im = Image.open(BytesIO(picturetag.data))
+            img_width,img_height = im.size
+            if img_width > self.MAX_IMG_WIDTH or img_height > self.MAX_IMG_HEIGHT:
+                if args.verbose > 2:
+                    print("Resizing from %s to %s" % (im.size, self.MAX_IMG_SZ))
+                im.thumbnail(self.MAX_IMG_SZ, Image.LANCZOS)
+                im = im.convert('RGB')
+                img_bytes = BytesIO()
+                im.save(img_bytes, format='JPEG', dpi=self.MAX_DPI,optimize=True, quality=50)
+                # rewind it, we need to read it :-D
+                img_bytes.seek(0)
+                #fname = pathlib.Path(music_file).stem
+                #im.save("%s.jpg" % fname, format='JPEG', dpi=self.MAX_DPI, optimize=True, quality=50)
+
+
+            mp3file.tags.delall("APIC") # Delete every APIC tag (Cover art)
+            mp3file.tags["APIC"] = APIC(
+                encoding=3,
+                mime="image/jpeg",
+                type=3, desc=u'Cover',
+                data=img_bytes.read()
+            )
+            mp3file.save()        
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", help="Show data about file and processing", action="count", default=0)
     parser.add_argument("-j", "--jam-root", help="Jam Sport Plus root directory (e.g. /Volumes/SPORT\ PLUS) or D:\\", default=None)
-    parser.add_argument("-d", "--directory", help="Directory to create the playlist (inside $JAM_ROOT/Music)")
-    parser.add_argument("-m", "--migrate", help="Directory to migrate (target directory is directory)")
+    parser.add_argument("-d", "--directory", help="Directory to create the playlist (inside $JAM_ROOT/Music) (use . to create playlist for all the music)")
+    parser.add_argument("-m", "--migrate-playlist", help="Read playlist, migrate to the jam the music and create the playlist")
     parser.add_argument("playlist", help="Play list name")
     args = parser.parse_args()
 
@@ -240,13 +289,15 @@ if __name__ == "__main__":
     if not args.jam_root or not os.path.exists(args.jam_root):
         raise ValueError("please set a valid --jam-root directory: %s" % args.jam_root)
 
-    if args.directory and not args.migrate:
+    if args.directory and not args.migrate_playlist:
         # create a playlist in the directory pm.jam_root/Music/args.directory`
         playlist_data = pm.build_playlist_from_directory(args.directory)
-        print(playlist_data)
         pm.store_playlist(playlist_data, args.playlist, format='m3u')
         sys.exit(0)
 
-    if args.migrate and args.directory:
-        playlist_data = pm.read_playlist(args.migrate, args.playlist)
-        pm.migrate_playlist(playlist_data, args.playlist, from_dir=args.migrate, to_dir=args.directory)
+    if args.migrate_playlist:
+        # migrate a current existing playlist to the jam, moving the music, and creating the playlist.
+        playlist_data = pm.read_playlist(args.migrate_playlist)
+
+        pm.migrate_playlist(playlist_data, args.playlist, args.migrate_playlist)
+        sys.exit(0)
