@@ -5,6 +5,14 @@ Manage Playlists from itunes to migrate them to the sandisk jam (m3u8 format)
 Currently, create a playlist from directory and migrate itunes playlists to sandisk's jam directory format is implemented. You can check the [web page](https://support-es.wd.com/app/products/product-detailweb/p/8724) for more
 details [the manual](https://downloads.sandisk.com/downloads/um/clipsportplus-um-es.pdf) and some support if needed.
 
+## deps
+
+```
+python3 -m pip install mutagen
+python3 -m pip install m3u8
+python3 -m pip install PILLOW
+```
+
 ### Playlist format and details
 
 * Ended with `\r\n` (`\0xD\0xA`) if not, it doesn't work. 

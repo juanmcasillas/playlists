@@ -292,7 +292,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", help="Show data about file and processing", action="count", default=0)
-    parser.add_argument("-j", "--jam-root", help="Jam Sport Plus root directory (e.g. /Volumes/SPORT\ PLUS) or D:\\", default=None)
+    parser.add_argument("-j", "--jam-root", help="Jam Sport Plus root directory (e.g. /Volumes/SPORT PLUS) or D:\\", default=None)
     parser.add_argument("-d", "--directory", help="Directory to create the playlist (inside $JAM_ROOT/Music) (use . to create playlist for all the music)")
     parser.add_argument("-m", "--migrate-playlist", help="Read playlist, migrate to the jam the music and create the playlist")
     parser.add_argument("playlist", help="Play list name")
