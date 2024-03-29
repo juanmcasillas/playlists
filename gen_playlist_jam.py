@@ -227,8 +227,9 @@ class PlayListManager:
                 print("copying %s -> %s" % (src_file, tgt_file))
 
             try:
-                shutil.copyfile(src_file, tgt_file)
-                self.check_artwork(tgt_file)
+                if not os.path.exists(tgt_file):
+                    shutil.copyfile(src_file, tgt_file)
+                    self.check_artwork(tgt_file)
             except shutil.SameFileError:
                 pass
 
