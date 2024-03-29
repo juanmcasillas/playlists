@@ -251,7 +251,14 @@ class PlayListManager:
             
             picturetag = tags['APIC:']
             picturetag.type = 3
-            im = Image.open(BytesIO(picturetag.data))
+            try:
+                im = Image.open(BytesIO(picturetag.data))
+            except Exception as e:
+                print("Invalid APIC entry, removing it: %s" % e)
+                mp3file.tags.delall("APIC") # Delete every APIC tag (Cover art)
+                mp3file.save()
+                return
+            
             img_width,img_height = im.size
             if img_width > self.MAX_IMG_WIDTH or img_height > self.MAX_IMG_HEIGHT:
                 if args.verbose > 2:
@@ -265,15 +272,14 @@ class PlayListManager:
                 #fname = pathlib.Path(music_file).stem
                 #im.save("%s.jpg" % fname, format='JPEG', dpi=self.MAX_DPI, optimize=True, quality=50)
 
-
-            mp3file.tags.delall("APIC") # Delete every APIC tag (Cover art)
-            mp3file.tags["APIC"] = APIC(
-                encoding=3,
-                mime="image/jpeg",
-                type=3, desc=u'Cover',
-                data=img_bytes.read()
-            )
-            mp3file.save()        
+                mp3file.tags.delall("APIC") # Delete every APIC tag (Cover art)
+                mp3file.tags["APIC"] = APIC(
+                    encoding=3,
+                    mime="image/jpeg",
+                    type=3, desc=u'Cover',
+                    data=img_bytes.read()
+                )
+                mp3file.save()        
 
 if __name__ == "__main__":
 
