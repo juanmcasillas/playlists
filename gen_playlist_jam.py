@@ -240,8 +240,15 @@ class PlayListManager:
 
     def check_artwork(self, music_file):
         # change image things.
-        mp3file = MP3(music_file, ID3=ID3)
+        try:
+            mp3file = MP3(music_file, ID3=ID3)
+        except Exception as e:
+            print("Invalid MP3 file, skipping it: %s %s" % (music_file, e))
+            return
+        
         tags = mp3file.tags
+        if not tags:
+            return 
         if args.verbose > 2:
             print("----", music_file)
             print(tags.pprint())
