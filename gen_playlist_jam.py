@@ -52,18 +52,18 @@ class PlayListManager:
         self.jam_root = None
 
     def check_platform(self, jam_root):
+
         if jam_root:
             self.jam_root = jam_root
-            return jam_root
 
-        system = platform.system()
-        if not system in PlayListManager.platforms.keys():
-            return None
-
-        self.jam_root = PlayListManager.platforms[system]
-        self.music_path = self.jam_music_dir(self.jam_root)
-        self.playlist_path = self.jam_playlist_dir(self.jam_root)
-
+        else:
+            system = platform.system()
+            if not system in PlayListManager.platforms.keys():
+                return None
+            self.jam_root = PlayListManager.platforms[system]
+ 
+        self.music_path = self.jam_music_dir()
+        self.playlist_path = self.jam_playlist_dir()
         return self.jam_root
 
     def generate_playlist_entry(self, id3, name):
@@ -84,6 +84,12 @@ class PlayListManager:
 
         return ret
 
+    def to_jam_path(self, p):
+        return p.replace("/","\\")
+    
+    def from_jam_path(self, p):
+        return p.replace("\\","/")
+        
     def jam_dir(self, base, directory):
         if self.jam_root:
             directory = os.path.join(self.jam_root, base, directory)
@@ -99,7 +105,12 @@ class PlayListManager:
         # return the entry using the base directory of jam's music
         # use the windows format supported in the player
         p = "..\\%s" % pathlib.Path(entry).relative_to(self.jam_root)
-        return p.replace("/","\\")
+        return self.to_jam_path(p)
+
+    def jam_abs_music_entry_dir(self, entry):
+        # return the absolute path of the music entry in the JAM_ROOT/Music dir
+        p = os.path.join(self.music_path,entry)
+        return p
 
     def build_playlist_from_directory(self, directory):
 
@@ -315,6 +326,17 @@ class PlayListManager:
             directory = self.jam_playlist_dir()
             return self.list_dir(directory)
         
+        target = self.guess_playlist(playlist)
+        playlist = self.read_playlist(target)
+        items = []
+        for i in playlist:
+            fname = i['file']
+            fname = self.from_jam_path(fname)
+            items.append(pathlib.Path(fname).name)
+
+        return items
+    
+    def guess_playlist(self, playlist):
         target = self.jam_playlist_dir(playlist)
         path =  pathlib.Path(target)
         if path.suffix in ('.m3u8', '.m3u'):
@@ -324,18 +346,53 @@ class PlayListManager:
             if not os.path.exists(target):
                 target += "8"
                 if not os.path.exists(target):
-                    raise ValueError("playlist %s doesn't exists: %s" % playlist)
-        playlist = self.read_playlist(target)
-        items = []
-        for i in playlist:
-            fname = i['file']
-            if fname.find("\\"):
-                fname = fname.replace("\\","/")
-            items.append(pathlib.Path(fname).name)
+                    raise ValueError("playlist %s doesn't exists: %s" % playlist)        
+        return target
+    
+    def gen_hash(self, fname):
+        "move the exiting playlists in device to a hashed one. Be careful with the paths"
+        if not fname:
+            raise ValueError("Can't generate hash from empty name")
 
-        return items
+        name = pathlib.Path(fname).stem
+        
+        # ignore extension for length
+        if len(name) < 2:
+            raise ValueError("Name is too short to generate a hash: %s" % fname)
+
+        dirpath  = str(pathlib.Path(fname).parent)
+        name = pathlib.Path(fname).name
+        A = name[0].upper()
+        B = name[1].upper()
+        dest =  "/".join([dirpath,A,B,name])
+        return dest
+
+
+
+    def convert_playlist(self, playlist_data, playlist_name):
+         
+        new_playlist = []
+
+        for item in playlist_data:
+            # get the entry, build the absolute path
+            fname = pathlib.Path(self.from_jam_path(item['file'])).name
+            src_name = self.jam_abs_music_entry_dir(fname)
+            tgt_name = self.gen_hash(src_name)
+            tgt_dir = pathlib.Path(tgt_name).parent
+            plist_file = self.to_jam_path("..\\%s" % pathlib.Path(tgt_name).relative_to(self.jam_root))
+            if  not os.path.exists(tgt_dir):
+                #print("creating %s" % tgt_dir)
+                os.makedirs(tgt_dir, exist_ok=True)
             
+            try:
+                if not os.path.exists(tgt_name):
+                    shutil.move(src_name, tgt_name)
+            except shutil.SameFileError:
+                pass
+            item['file'] = plist_file
+            new_playlist.append(item)
 
+        self.gen_m3u_playlist(new_playlist, playlist_name)
 
 if __name__ == "__main__":
 
@@ -355,22 +412,21 @@ if __name__ == "__main__":
     p_migrate.add_argument("source_playlist", help="Read the playlist from this source")
     p_migrate.add_argument("playlist", help="Store the playlist as <playlist>")
 
-
-
     p_list_songs = subparsers.add_parser("list_songs",help="List available songs in $JAM_ROOT/Music")
     p_list_playlists = subparsers.add_parser("list_playlists",help="List available playlists $JAM_ROOT/Playlists")
     p_list_playlists.add_argument("playlist", help="list also the songs on that playlist", default=None, nargs="?")
     args = parser.parse_args()
-
 
     pm = PlayListManager(args.verbose)
     args.jam_root = pm.check_platform(args.jam_root)
     if not args.jam_root or not os.path.exists(args.jam_root):
         raise ValueError("please set a valid --jam-root directory: %s" % args.jam_root)
 
-    print(args)
+
     if args.subparser_name == "convert":
-        print("converting ")
+        playlist = pm.guess_playlist(args.playlist)
+        playlist_data = pm.read_playlist(playlist)
+        pm.convert_playlist(playlist_data, args.playlist)
         sys.exit(0)
 
     if args.subparser_name == "process":
@@ -405,3 +461,4 @@ if __name__ == "__main__":
         sys.exit(0)
 
 
+    
