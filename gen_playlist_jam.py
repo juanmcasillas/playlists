@@ -42,6 +42,8 @@ class PlayListManager:
     MAX_IMG_SZ = (450, 450)
     MAX_IMG_WIDTH, MAX_IMG_HEIGHT = MAX_IMG_SZ
     MAX_DPI = (72,72)
+    UNKNOWN_ARTIST = "Unknown Artist"
+    UNKNOWN_ALBUM = "Unknown Album"
 
     def __init__(self, verbose=False):
         self.verbose = verbose
@@ -94,6 +96,13 @@ class PlayListManager:
         if self.jam_root:
             directory = os.path.join(self.jam_root, base, directory)
         return directory
+    
+    def jam_remove_music_dir(self, entry):
+ 
+        p = self.from_jam_path(entry)
+        
+        base = pathlib.Path("..") / pathlib.Path(self.MUSIC_DIR)
+        return pathlib.Path(p).relative_to(base)
 
     def jam_music_dir(self, directory=""):
         return self.jam_dir(self.MUSIC_DIR, directory)
@@ -253,6 +262,32 @@ class PlayListManager:
 
         self.gen_m3u_playlist(new_playlist, playlist_name)
 
+    def get_id3_info(self, music_file):
+        try:
+            mp3file = MP3(music_file, ID3=ID3)
+        except Exception as e:
+            print("Invalid MP3 file, skipping it: %s %s" % (music_file, e))
+            return (self.UNKNOWN_ARTIST,self.UNKNOWN_ALBUM)
+
+        mp3file = EasyID3(music_file)
+        if not mp3file:
+            return (self.UNKNOWN_ARTIST,self.UNKNOWN_ALBUM) 
+        
+        artist = self.UNKNOWN_ARTIST
+        album = self.UNKNOWN_ALBUM
+        if "artist" in mp3file.keys():
+            if len(mp3file["artist"]) >= 1:
+                artist = mp3file["artist"][0]
+            else:
+                artist = mp3file["artist"]
+        if "album" in mp3file.keys():
+            if len(mp3file["album"]) >= 1:
+                album = mp3file["album"][0]
+            else:
+                album = mp3file["album"]
+
+        return(artist, album)
+
     def check_artwork(self, music_file):
         # change image things.
         try:
@@ -353,11 +388,11 @@ class PlayListManager:
                     raise ValueError("playlist %s doesn't exists: %s" % playlist)        
         return target
     
-    def gen_hash(self, fname):
-        "move the exiting playlists in device to a hashed one. Be careful with the paths"
+    def gen_hash_by_dir(self, fname):
+        "DEPRECATED. See gen_hash"
+        "move the exiting playlists in device to a hashed one. Be careful with the paths. Use Artist/Album Mp3"
         if not fname:
             raise ValueError("Can't generate hash from empty name")
-
         name = pathlib.Path(fname).stem
         
         # ignore extension for length
@@ -371,10 +406,22 @@ class PlayListManager:
         dest =  "/".join([dirpath,A,B,name])
         return dest
 
+    def gen_hash(self, fname):
+        "move the exiting playlists in device to a hashed one. Be careful with the paths"
+        if not fname:
+            raise ValueError("Can't generate hash from empty name")
+
+        A,B = self.get_id3_info(fname)
+        dirpath  = str(pathlib.Path(fname).parent)
+        name = pathlib.Path(fname).name
+        dest =  "/".join([dirpath,A,B,name])
+        return dest
+
+
+
 
 
     def convert_playlist(self, playlist_data, playlist_name):
-         
         new_playlist = []
 
         for item in playlist_data:
@@ -398,6 +445,28 @@ class PlayListManager:
 
         self.gen_m3u_playlist(new_playlist, playlist_name)
 
+
+    def revert_playlist(self, playlist_data, playlist_name):
+        new_playlist = []
+
+        for item in playlist_data:
+
+            # get the entry, build the absolute path
+            fname = pathlib.Path(self.from_jam_path(item['file']))
+            src_name = self.jam_abs_music_entry_dir(self.jam_remove_music_dir(str(fname)))
+            tgt_name =  self.jam_abs_music_entry_dir(fname.name)
+            plist_file = self.to_jam_path("..\\%s" % pathlib.Path(tgt_name).relative_to(self.jam_root))
+            try:
+                if not os.path.exists(tgt_name):
+                    shutil.move(src_name, tgt_name)
+            except shutil.SameFileError:
+                pass
+            item['file'] = plist_file
+            new_playlist.append(item)
+
+        self.gen_m3u_playlist(new_playlist, playlist_name)
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -407,6 +476,9 @@ if __name__ == "__main__":
 
     p_convert = subparsers.add_parser("convert", help="Convert a existing playlist to the new format")
     p_convert.add_argument("playlist", help="Convert from plain dir to hashed one")
+
+    p_convert = subparsers.add_parser("revert", help="Revert a existing playlist to the old format")
+    p_convert.add_argument("playlist", help="Convert from hashed dir to plain one")
 
     p_process = subparsers.add_parser("process",help="Create the playlist from an existing directory with music (recursive)")
     p_process.add_argument("directory", help="Directory to create the playlist (inside $JAM_ROOT/Music) (use . to create playlist for all the music)")
@@ -426,6 +498,12 @@ if __name__ == "__main__":
     if not args.jam_root or not os.path.exists(args.jam_root):
         raise ValueError("please set a valid --jam-root directory: %s" % args.jam_root)
 
+
+    if args.subparser_name == "revert":
+        playlist = pm.guess_playlist(args.playlist)
+        playlist_data = pm.read_playlist(playlist)
+        pm.revert_playlist(playlist_data, args.playlist)
+        sys.exit(0)
 
     if args.subparser_name == "convert":
         playlist = pm.guess_playlist(args.playlist)
