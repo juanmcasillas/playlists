@@ -269,7 +269,12 @@ class PlayListManager:
             print("Invalid MP3 file, skipping it: %s %s" % (music_file, e))
             return (self.UNKNOWN_ARTIST,self.UNKNOWN_ALBUM)
 
-        mp3file = EasyID3(music_file)
+        try:
+            mp3file = EasyID3(music_file)
+        except Exception as e:
+            print("Invalid ID3 tags, skipping it: %s %s" % (music_file, e))
+            return (self.UNKNOWN_ARTIST,self.UNKNOWN_ALBUM)
+
         if not mp3file:
             return (self.UNKNOWN_ARTIST,self.UNKNOWN_ALBUM) 
         
@@ -417,8 +422,16 @@ class PlayListManager:
         dest =  "/".join([dirpath,A,B,name])
         return dest
 
+    def find_in_music_dir(self, entry):
+        directory = self.jam_music_dir()
 
+        for path, dirc, files in os.walk(directory):
+            for name in files:
+                full_fname =  os.path.sep.join([path] + [name])
+                if name.encode('utf-8') == entry.encode('utf-8'):
+                    return(full_fname)
 
+        return None
 
 
     def convert_playlist(self, playlist_data, playlist_name):
@@ -428,18 +441,29 @@ class PlayListManager:
             # get the entry, build the absolute path
             fname = pathlib.Path(self.from_jam_path(item['file'])).name
             src_name = self.jam_abs_music_entry_dir(fname)
-            tgt_name = self.gen_hash(src_name)
-            tgt_dir = pathlib.Path(tgt_name).parent
-            plist_file = self.to_jam_path("..\\%s" % pathlib.Path(tgt_name).relative_to(self.jam_root))
-            if  not os.path.exists(tgt_dir):
-                #print("creating %s" % tgt_dir)
-                os.makedirs(tgt_dir, exist_ok=True)
-            
-            try:
-                if not os.path.exists(tgt_name):
-                    shutil.move(src_name, tgt_name)
-            except shutil.SameFileError:
-                pass
+            if not os.path.exists(src_name):
+                # I have to find it on the directory, because a bad migration happen
+                # so find it and update the list
+                    src_name = self.find_in_music_dir(fname)
+                    if not src_name:
+                        #last
+                        raise ValueError("File %s can't be found" % fname)
+                    plist_file = self.to_jam_path("..\\%s" % pathlib.Path(src_name).relative_to(self.jam_root))
+            else:
+                # legit file, so move it
+                tgt_name = self.gen_hash(src_name)  
+                tgt_dir = pathlib.Path(tgt_name).parent
+                plist_file = self.to_jam_path("..\\%s" % pathlib.Path(tgt_name).relative_to(self.jam_root))
+                if  not os.path.exists(tgt_dir):
+                    #print("creating %s" % tgt_dir)
+                    os.makedirs(tgt_dir, exist_ok=True)
+                
+                try:
+                    if not os.path.exists(tgt_name):
+                        shutil.move(src_name, tgt_name)
+                except shutil.SameFileError:
+                    pass
+
             item['file'] = plist_file
             new_playlist.append(item)
 
