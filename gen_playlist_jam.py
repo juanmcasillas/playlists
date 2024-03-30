@@ -42,8 +42,10 @@ class PlayListManager:
     MAX_IMG_SZ = (450, 450)
     MAX_IMG_WIDTH, MAX_IMG_HEIGHT = MAX_IMG_SZ
     MAX_DPI = (72,72)
+    UNKNOWN_GENRE = "Unknown Genre"
     UNKNOWN_ARTIST = "Unknown Artist"
     UNKNOWN_ALBUM = "Unknown Album"
+    UNKNOWN_ALL = (UNKNOWN_GENRE, UNKNOWN_ARTIST, UNKNOWN_ALBUM)
 
     def __init__(self, verbose=False):
         self.verbose = verbose
@@ -267,31 +269,36 @@ class PlayListManager:
             mp3file = MP3(music_file, ID3=ID3)
         except Exception as e:
             print("Invalid MP3 file, skipping it: %s %s" % (music_file, e))
-            return (self.UNKNOWN_ARTIST,self.UNKNOWN_ALBUM)
+            return self.UNKNOWN_ALL
 
         try:
             mp3file = EasyID3(music_file)
         except Exception as e:
             print("Invalid ID3 tags, skipping it: %s %s" % (music_file, e))
-            return (self.UNKNOWN_ARTIST,self.UNKNOWN_ALBUM)
+            return self.UNKNOWN_ALL
 
         if not mp3file:
-            return (self.UNKNOWN_ARTIST,self.UNKNOWN_ALBUM) 
+            return self.UNKNOWN_ALL 
         
+        genre = self.UNKNOWN_GENRE
         artist = self.UNKNOWN_ARTIST
         album = self.UNKNOWN_ALBUM
-        if "artist" in mp3file.keys():
-            if len(mp3file["artist"]) >= 1:
-                artist = mp3file["artist"][0]
-            else:
-                artist = mp3file["artist"]
-        if "album" in mp3file.keys():
-            if len(mp3file["album"]) >= 1:
-                album = mp3file["album"][0]
-            else:
-                album = mp3file["album"]
 
-        return(artist, album)
+        def get_id3_key(dict, key, default=None):
+            r = default
+            if key in dict.keys():
+                if len(dict[key]) >= 1:
+                    r = dict[key][0]
+                else:
+                    r = dict[key]
+            return r
+            
+
+        genre  = get_id3_key(mp3file, "genre", self.UNKNOWN_GENRE)            
+        artist = get_id3_key(mp3file, "artist", self.UNKNOWN_ARTIST)
+        album  = get_id3_key(mp3file, "album", self.UNKNOWN_ALBUM)
+        
+        return(genre, artist, album)
 
     def check_artwork(self, music_file):
         # change image things.
@@ -416,10 +423,10 @@ class PlayListManager:
         if not fname:
             raise ValueError("Can't generate hash from empty name")
 
-        A,B = self.get_id3_info(fname)
+        A,B,C = self.get_id3_info(fname)
         dirpath  = str(pathlib.Path(fname).parent)
         name = pathlib.Path(fname).name
-        dest =  "/".join([dirpath,A,B,name])
+        dest =  "/".join([dirpath,A,B,C,name])
         return dest
 
     def find_in_music_dir(self, entry):
