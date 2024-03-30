@@ -35,4 +35,4 @@ For a playlist stored in `SPORT PLUS\Playlists` the file paths are:
 
 ###  how to run
 * on mac: `python3.9 gen_playlist_jam.py -vvv  -m dev/itunes-mac/nano.m3u8 nano`
-* on windows: ``
+* on windows: `C:\Python312\python.exe gen_playlist_jam.py -vvv -j "E:\\" -m "dev\\itunes-pc\\remix.m3u" remix`
