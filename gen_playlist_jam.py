@@ -196,7 +196,7 @@ class PlayListManager:
                 })
         return playlist
 
-    def migrate_playlist(self, playlist_data, playlist_name, from_playlist, create_dir=False):
+    def migrate_playlist(self, playlist_data, playlist_name, from_playlist, create_dir=False, use_hash=True):
 
         new_playlist = []
 
@@ -228,6 +228,10 @@ class PlayListManager:
                 src_file = from_dir_path / src_file
             else:
                 tgt_file = to_dir_path / src_file.name
+
+            # add hash here
+            if use_hash:
+                tgt_file = pathlib.Path(self.gen_hash(tgt_file))
 
             # create target structure.
             tgt_path = tgt_file.parent
