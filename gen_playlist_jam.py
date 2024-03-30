@@ -288,29 +288,120 @@ class PlayListManager:
                 )
                 mp3file.save()        
 
+    def list_dir(self,directory, ext=None):
+        items = []
+
+        for path, dirc, files in os.walk(directory):
+            for name in files:
+                
+                if ext and name.lower().endswith(ext):
+                    # build the relative path in this platform
+                    full_fname =  os.path.sep.join([path] + [name])
+                    local_fname = pathlib.Path(full_fname).relative_to(directory)
+                    items.append(local_fname)
+                if not ext:
+                    full_fname =  os.path.sep.join([path] + [name])
+                    local_fname = pathlib.Path(full_fname).relative_to(directory)
+                    items.append(local_fname)
+
+        return items
+    
+    def list_songs(self):
+        directory = self.jam_music_dir()
+        return self.list_dir(directory, self.extensions)
+
+    def list_playlists(self, playlist=None):
+        if not playlist:
+            directory = self.jam_playlist_dir()
+            return self.list_dir(directory)
+        
+        target = self.jam_playlist_dir(playlist)
+        path =  pathlib.Path(target)
+        if path.suffix in ('.m3u8', '.m3u'):
+            pass
+        else:
+            target = "%s.m3u" % target
+            if not os.path.exists(target):
+                target += "8"
+                if not os.path.exists(target):
+                    raise ValueError("playlist %s doesn't exists: %s" % playlist)
+        playlist = self.read_playlist(target)
+        items = []
+        for i in playlist:
+            fname = i['file']
+            if fname.find("\\"):
+                fname = fname.replace("\\","/")
+            items.append(pathlib.Path(fname).name)
+
+        return items
+            
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", help="Show data about file and processing", action="count", default=0)
     parser.add_argument("-j", "--jam-root", help="Jam Sport Plus root directory (e.g. /Volumes/SPORT PLUS) or D:\\", default=None)
-    parser.add_argument("-d", "--directory", help="Directory to create the playlist (inside $JAM_ROOT/Music) (use . to create playlist for all the music)")
-    parser.add_argument("-m", "--migrate-playlist", help="Read playlist, migrate to the jam the music and create the playlist")
-    parser.add_argument("playlist", help="Play list name")
+    subparsers = parser.add_subparsers(dest="subparser_name", help='Command help')
+
+    p_convert = subparsers.add_parser("convert", help="Convert a existing playlist to the new format")
+    p_convert.add_argument("playlist", help="Convert from plain dir to hashed one")
+
+    p_process = subparsers.add_parser("process",help="Create the playlist from an existing directory with music (recursive)")
+    p_process.add_argument("directory", help="Directory to create the playlist (inside $JAM_ROOT/Music) (use . to create playlist for all the music)")
+    p_process.add_argument("playlist", help="Play list name")
+
+    p_migrate = subparsers.add_parser("migrate",help="Migrate a exiting playlist to the jam")
+    p_migrate.add_argument("source_playlist", help="Read the playlist from this source")
+    p_migrate.add_argument("playlist", help="Store the playlist as <playlist>")
+
+
+
+    p_list_songs = subparsers.add_parser("list_songs",help="List available songs in $JAM_ROOT/Music")
+    p_list_playlists = subparsers.add_parser("list_playlists",help="List available playlists $JAM_ROOT/Playlists")
+    p_list_playlists.add_argument("playlist", help="list also the songs on that playlist", default=None, nargs="?")
     args = parser.parse_args()
+
 
     pm = PlayListManager(args.verbose)
     args.jam_root = pm.check_platform(args.jam_root)
     if not args.jam_root or not os.path.exists(args.jam_root):
         raise ValueError("please set a valid --jam-root directory: %s" % args.jam_root)
 
-    if args.directory and not args.migrate_playlist:
+    print(args)
+    if args.subparser_name == "convert":
+        print("converting ")
+        sys.exit(0)
+
+    if args.subparser_name == "process":
         # create a playlist in the directory pm.jam_root/Music/args.directory`
         playlist_data = pm.build_playlist_from_directory(args.directory)
         pm.store_playlist(playlist_data, args.playlist, format='m3u')
         sys.exit(0)
 
-    if args.migrate_playlist:
+    if args.subparser_name == "migrate":
         # migrate a current existing playlist to the jam, moving the music, and creating the playlist.
-        playlist_data = pm.read_playlist(args.migrate_playlist)
-        pm.migrate_playlist(playlist_data, args.playlist, args.migrate_playlist)
+        playlist_data = pm.read_playlist(args.source_playlist)
+        pm.migrate_playlist(playlist_data, args.playlist, args.source_playlist)
         sys.exit(0)
+
+    if args.subparser_name == "list_songs":
+        # migrate a current existing playlist to the jam, moving the music, and creating the playlist.
+        songs = pm.list_songs()
+        for s in songs:
+            print("%s" % s)
+        print("Total: %d songs" % len(songs))
+        sys.exit(0)
+
+    if args.subparser_name == "list_playlists":
+        # migrate a current existing playlist to the jam, moving the music, and creating the playlist.
+        playlists = pm.list_playlists(args.playlist)
+        for p in playlists:
+            print("%s" % p)
+        if not args.playlist:
+            print("Total: %d playlists" % len(playlists))
+        else:
+            print("Total: %d songs in '%s' playlist" % (len(playlists),args.playlist))
+        sys.exit(0)
+
+
