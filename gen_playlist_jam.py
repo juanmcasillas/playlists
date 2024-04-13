@@ -242,7 +242,8 @@ class PlayListManager:
 
             # add hash here
             if use_hash:
-                tgt_file = pathlib.Path(self.gen_hash(tgt_file))
+                # use src file to get the mp3info.
+                tgt_file = pathlib.Path(self.gen_hash(tgt_file,src=src_file))
 
             # create target structure.
             tgt_path = tgt_file.parent
@@ -268,7 +269,7 @@ class PlayListManager:
         try:
             mp3file = MP3(music_file, ID3=ID3)
         except Exception as e:
-            print("Invalid MP3 file, skipping it: %s %s" % (music_file, e))
+            print("get id3info Invalid MP3 file, skipping it: %s %s" % (music_file, e))
             return self.UNKNOWN_ALL
 
         try:
@@ -305,7 +306,7 @@ class PlayListManager:
         try:
             mp3file = MP3(music_file, ID3=ID3)
         except Exception as e:
-            print("Invalid MP3 file, skipping it: %s %s" % (music_file, e))
+            print("check artwork Invalid MP3 file, skipping it: %s %s" % (music_file, e))
             return
         
         tags = mp3file.tags
@@ -418,12 +419,15 @@ class PlayListManager:
         dest =  "/".join([dirpath,A,B,name])
         return dest
 
-    def gen_hash(self, fname):
+    def gen_hash(self, fname, src=None):
         "move the exiting playlists in device to a hashed one. Be careful with the paths"
         if not fname:
             raise ValueError("Can't generate hash from empty name")
 
-        A,B,C = self.get_id3_info(fname)
+        if src:
+            A,B,C = self.get_id3_info(src)
+        else:
+            A,B,C = self.get_id3_info(fname)
         dirpath  = str(pathlib.Path(fname).parent)
         name = pathlib.Path(fname).name
         dest =  "/".join([dirpath,A,B,C,name])
