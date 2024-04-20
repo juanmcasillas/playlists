@@ -206,6 +206,55 @@ class PlayListManager:
                     'duration': i.duration
                 })
         return playlist
+    
+    def read_jam_playlist(self, playlist_name):
+        directory = self.jam_playlist_dir()
+        target = self.guess_playlist(playlist_name)
+        playlist = self.read_playlist(target)
+        return playlist
+
+
+    def export_playlist(self, playlist_data, playlist_name, target_directory):
+
+        if  not os.path.exists(target_directory):
+            os.makedirs(target_directory, exist_ok=True)
+
+
+        from_dir_path = self.jam_music_dir()
+        to_dir_path   = pathlib.Path(target_directory  )
+
+        # process the source data in playlist_data. If copy_files false
+        # move then to the relative directory, and change the path else
+        # move the files. Then write the playlist in the right place
+        # with the pointers moved.
+        for item in playlist_data:
+            # check if the path is absolute.
+            # if so, just copy the file (check the intermediate paths)
+            # else, build the abs path and do it.
+            src_file = pathlib.Path(item['file'])
+
+            if not src_file.is_absolute():
+                tgt_file = src_file
+                src_file = from_dir_path / src_file
+            else:
+                tgt_file = to_dir_path / src_file.name
+
+            # convert to export path
+            tgt_file = to_dir_path / pathlib.Path(self.from_jam_path(str(tgt_file))).name 
+            src_file = self.from_jam_path(str(src_file))
+            # create target structure.
+            tgt_path = tgt_file.parent
+            if  not os.path.exists(tgt_path):
+                os.makedirs(tgt_path, exist_ok=True)
+
+            if args.verbose:
+                print("copying %s -> %s" % (src_file, tgt_file))
+
+            try:
+                if not os.path.exists(tgt_file):
+                    shutil.copyfile(src_file, tgt_file)
+            except shutil.SameFileError:
+                pass
 
     def migrate_playlist(self, playlist_data, playlist_name, from_playlist, create_dir=False, use_hash=True):
 
@@ -523,6 +572,10 @@ if __name__ == "__main__":
     p_migrate.add_argument("source_playlist", help="Read the playlist from this source")
     p_migrate.add_argument("playlist", help="Store the playlist as <playlist>")
 
+    p_export = subparsers.add_parser("export",help="Migrate a playlist from the jam to a directory")
+    p_export.add_argument("playlist", help="Read the playlist playlist")
+    p_export.add_argument("target_dir", help="Store the items in directory <target_dir>")
+
     p_list_songs = subparsers.add_parser("list_songs",help="List available songs in $JAM_ROOT/Music")
     p_list_playlists = subparsers.add_parser("list_playlists",help="List available playlists $JAM_ROOT/Playlists")
     p_list_playlists.add_argument("playlist", help="list also the songs on that playlist", default=None, nargs="?")
@@ -556,6 +609,12 @@ if __name__ == "__main__":
         # migrate a current existing playlist to the jam, moving the music, and creating the playlist.
         playlist_data = pm.read_playlist(args.source_playlist)
         pm.migrate_playlist(playlist_data, args.playlist, args.source_playlist)
+        sys.exit(0)
+
+    if args.subparser_name == "export":
+        # export the playlist to the directory target_directory
+        playlist_data = pm.read_jam_playlist(args.playlist)
+        pm.export_playlist(playlist_data, args.playlist, args.target_dir)
         sys.exit(0)
 
     if args.subparser_name == "list_songs":
