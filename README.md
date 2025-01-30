@@ -104,6 +104,8 @@ positional arguments:
 
 optional arguments:
   -h, --help       show this help message and exit
+
+ python3.9 gen_playlist_jam.py -vvv migrate dev/itunes-mac/list-01.m3u8 list-01
 ```
 
 ### List songs
@@ -136,3 +138,8 @@ optional arguments:
 ### How to run (deprecated)
 * on mac: `python3.9 gen_playlist_jam.py -vvv  -m dev/itunes-mac/nano.m3u8 nano`
 * on windows: `C:\Python312\python.exe gen_playlist_jam.py -vvv -j "E:\\" -m "dev\\itunes-pc\\remix.m3u" remix`
+
+### Warnings
+
+Not support funky dots on paths. So fix it in code.
+
